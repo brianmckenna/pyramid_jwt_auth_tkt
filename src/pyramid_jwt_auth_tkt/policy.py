@@ -84,50 +84,52 @@ class JWTAuthTktAuthenticationPolicy(AuthTktAuthenticationPolicy):
         self.json_encoder = json_encoder
 
     def create_token(self, principal, csrf_token, expiration=None, **claims):
-
         payload = self.default_claims.copy()
         payload.update(claims)
         payload['sub'] = principal
         payload['iat'] = iat = datetime.datetime.utcnow()
-        payload['jti'] = csrf_token # https://tools.ietf.org/html/rfc7519#section-4.1.7
+        # CSRF using 'jti' https://tools.ietf.org/html/rfc7519#section-4.1.7
+        payload['jti'] = csrf_token
         expiration = expiration or self.expiration
         if expiration:
             if not isinstance(expiration, datetime.timedelta):
                 expiration = datetime.timedelta(seconds=expiration)
             payload['exp'] = iat + expiration
-        token = jwt.encode(payload, self.jwt_secret, algorithm=self.algorithm, json_encoder=self.json_encoder)
+        token = jwt.encode(payload, self.jwt_secret,
+                           algorithm=self.algorithm,
+                           json_encoder=self.json_encoder)
         if not isinstance(token, str):
             token = token.decode('ascii')
         return token
 
     def get_claims(self, request):
-        token = self.cookie.identify(request)
+        """ Claims stored in cookie['userid'] (to use AuthTktCookieHelper).
+        No cookie, no claims; No JWT, no claims; Invalid JWT, no claims."""
+        identity = self.cookie.identify(request)
+        if not identity: # no cookie == no claims
+            return {}
+        # JWT token stored in 'userid' so we can use AuthTktCookieHelper
+        token = identity.get('userid', None)
         if not token:
             return {}
         try:
-            claims = jwt.decode(token, self.public_key, algorithms=[self.algorithm], leeway=self.leeway)
+            claims = jwt.decode(token, self.public_key,
+                                algorithms=[self.algorithm],
+                                leeway=self.leeway)
         except jwt.InvalidTokenError as e:
-            log.warning('Invalid JWT token from %s: %s', request.remote_addr, e)
+            log.warning('Invalid JWT token. [REMOTE_ADDR: %s] %s',
+                        request.remote_addr, e)
             return {}
         return claims
 
+    # IAuthenticationPolicy
     def unauthenticated_userid(self, request):
-        """ The userid key within the auth_tkt cookie."""
-        result = self.cookie.identify(request)
-        if result:
-            return result['userid']
         return request.jwt_claims.get('sub')
 
     def remember(self, request, userid, **kw):
-        """ Accepts the following kw args:
-                ``max_age=<int-seconds>,
-                ``tokens=<sequence-of-ascii-strings>``.
-            Return a list of headers which will set appropriate cookies on the response.
-        """
         return self.cookie.remember(request, userid, **kw)
 
     def forget(self, request):
-        """ A list of headers which will delete appropriate cookies."""
         return self.cookie.forget(request)
 
     # ICSRFStoragePolicy
@@ -135,12 +137,11 @@ class JWTAuthTktAuthenticationPolicy(AuthTktAuthenticationPolicy):
         return text_(uuid4().hex)
 
     def get_csrf_token(self, request):
-        """ Returns the currently active CSRF token by checking the cookies sent with the current request."""
-        userid = self.cookie.identify(request) # JWT token is passed in as 'userid' to remember
-        print(userid)
+        """ Returns currently active CSRF token by checking cookie,
+        generating a new one if needed."""
         csrf_token = request.jwt_claims.get('jti', None)
         if not csrf_token:
-            return 'rut row'
+            return self.new_csrf_token(request)
         return csrf_token
 
     def check_csrf_token(self, request, supplied_token):
