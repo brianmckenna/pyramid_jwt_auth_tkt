@@ -11,6 +11,8 @@ from pyramid.util import strings_differ
 from uuid import uuid4
 from zope.interface import implementer
 
+#import traceback
+
 log = logging.getLogger('pyramid_jwt_auth_tkt')
 
 @implementer(IAuthenticationPolicy)
@@ -18,34 +20,34 @@ log = logging.getLogger('pyramid_jwt_auth_tkt')
 class JWTAuthTktAuthenticationPolicy(AuthTktAuthenticationPolicy):
 
     def __init__(self,
+                 # cookie required
                  tkt_secret,
-                 jwt_secret,
-                 # AuthTkt
-                 callback=None,
-                 cookie_name='access_token',
-                 secure=False,
-                 #secure=True,
-                 include_ip=False,
-                 timeout=None,
-                 reissue_time=None,
-                 max_age=None,
-                 path="/",
-                 #http_only=False,
-                 http_only=True,
-                 wild_domain=True,
-                 debug=False,
-                 hashalg='sha512',
-                 parent_domain=False,
-                 domain=None,
+                 cookie_name,#    = 'access_token',
+                 secure,#         = True,
+                 http_only,#      = True,
+                 domain,#         = None,
                  # JWT
-                 public_key=None,
-                 algorithm='HS512',
-                 leeway=0,
-                 expiration=None,
-                 default_claims=None,
-                 http_header='Authorization',
-                 auth_type='JWT',
-                 json_encoder=None,
+                 jwt_secret,#     = None,
+                 public_key,#     = None,
+                 algorithm,#      = 'HS512',
+                 leeway,#         = 0,
+                 expiration,#     = None,
+                 http_header,#    = 'Authorization',
+                 auth_type,#      = 'JWT',
+                 callback,#       = None,
+                 json_encoder,#   = None,
+                 # cookie additional
+                 include_ip     = False,
+                 timeout        = None,
+                 reissue_time   = None,
+                 max_age        = None,
+                 path           = "/",
+                 wild_domain    = True,
+                 debug          = True,
+                 hashalg        = 'sha512',
+                 parent_domain  = False,
+                 # JWY additional
+                 default_claims = None,
                  ):
 
         super().__init__(tkt_secret,
